@@ -7,6 +7,7 @@ import lombok.*;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 @Setter(value = AccessLevel.PRIVATE)
 @AllArgsConstructor(access = AccessLevel.PACKAGE)
+@ToString
 class CardReaderRequestData {
   @JsonProperty("number")
   private String number;

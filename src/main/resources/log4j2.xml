@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Properties>
+        <Property name="logPath">target/logs</Property>
+        <Property name="appFileName">app-log</Property>
+        <Property name="apiFileName">api-log</Property>
+    </Properties>
+    <Appenders>
+        <Console name="console" target="SYSTEM_OUT">
+            <PatternLayout
+                    pattern="[%highlight{%-5level}] %d{DEFAULT} %c{1}.%M() - %msg%n%throwable{short.lineNumber}"/>
+        </Console>
+        <RollingFile name="appFile" fileName="${logPath}/${appFileName}.log"
+                     filePattern="${logPath}/${appFileName}_%d{yyyy-MM-dd}(%i).log">
+            <PatternLayout
+                    pattern="[%highlight{%-5level}] %d{DEFAULT} %c{1}.%M() - %msg%n%throwable{short.lineNumber}"/>
+            <Policies>
+                <!-- Causes a rollover if the log file is older than the current JVM's start time -->
+                <OnStartupTriggeringPolicy/>
+                <!-- Causes a rollover once the date/time pattern no longer applies to the active file -->
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+            </Policies>
+        </RollingFile>
+        <RollingFile name="apiFile" fileName="${logPath}/${apiFileName}.log"
+                     filePattern="${logPath}/${apiFileName}_%d{yyyy-MM-dd}(%i).log">
+            <PatternLayout
+                    pattern="[%highlight{%-5level}] %d{DEFAULT} %c{1}.%M() - %msg%n%throwable{short.lineNumber}"/>
+            <Policies>
+                <!-- Causes a rollover if the log file is older than the current JVM's start time -->
+                <OnStartupTriggeringPolicy/>
+                <!-- Causes a rollover once the date/time pattern no longer applies to the active file -->
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+            </Policies>
+        </RollingFile>
+    </Appenders>
+    <Loggers>
+        <Logger name="com.example.connector.adapters.api" additivity="false">
+            <AppenderRef ref="apiFile"/>
+        </Logger>
+        <Root level="INFO" additivity="false">
+            <AppenderRef ref="console"/>
+            <AppenderRef ref="appFile"/>
+        </Root>
+    </Loggers>
+</Configuration>

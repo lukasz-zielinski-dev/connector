@@ -4,6 +4,7 @@
         <Property name="logPath">target/logs</Property>
         <Property name="appFileName">app-log</Property>
         <Property name="apiFileName">api-log</Property>
+        <Property name="accessSynchronizationJobFileName">access-synchronization-job-log</Property>
     </Properties>
     <Appenders>
         <Console name="console" target="SYSTEM_OUT">
@@ -32,10 +33,26 @@
                 <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
             </Policies>
         </RollingFile>
+        <RollingFile name="accessSynchronizationJobFile" fileName="${logPath}/${accessSynchronizationJobFileName}.log"
+                     filePattern="${logPath}/${accessSynchronizationJobFileName}_%d{yyyy-MM-dd}(%i).log">
+            <PatternLayout
+                    pattern="[%highlight{%-5level}] %d{DEFAULT} %c{1}.%M() - %msg%n%throwable{short.lineNumber}"/>
+            <Policies>
+                <!-- Causes a rollover if the log file is older than the current JVM's start time -->
+                <OnStartupTriggeringPolicy/>
+                <!-- Causes a rollover once the date/time pattern no longer applies to the active file -->
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+            </Policies>
+        </RollingFile>
     </Appenders>
     <Loggers>
         <Logger name="com.example.connector.adapters.api" additivity="false">
+            <AppenderRef ref="console"/>
             <AppenderRef ref="apiFile"/>
+        </Logger>
+        <Logger name="com.example.connector.adapters.scheduler.ScheduledAccessSynchronizationJob" additivity="false">
+            <AppenderRef ref="console"/>
+            <AppenderRef ref="accessSynchronizationJobFile"/>
         </Logger>
         <Root level="INFO" additivity="false">
             <AppenderRef ref="console"/>

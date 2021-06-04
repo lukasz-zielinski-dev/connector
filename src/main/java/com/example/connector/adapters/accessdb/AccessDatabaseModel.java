@@ -19,7 +19,7 @@ class AccessDatabaseModel {
   private final LocalDateTime to;
   private final List<CardReaderDatabaseModel> cardReaders;
 
-  static AccessDatabaseModel fromDomain(Access access) {
+  static AccessDatabaseModel fromDomain(final Access access) {
     final var id = access.getId();
     final var source = AccessSourceDatabaseModel.fromDomain(access.getSource());
     final var from = access.getFrom();

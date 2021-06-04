@@ -1,10 +1,8 @@
 package com.example.connector.domain.ports;
 
-import com.example.connector.domain.model.Access;
+import com.example.connector.domain.model.AccessesSnapshot;
 import com.example.connector.domain.model.Card;
 import org.springframework.stereotype.Component;
-
-import java.util.List;
 
 @Component
 public final class CardAccessService {
@@ -15,9 +13,8 @@ public final class CardAccessService {
     this.accessRepository = accessRepository;
   }
 
-  public String setCardAccess(final Card card, final List<Access> accesses) {
-    //        TODO log request
-    return accessRepository.setCardAccesses(card, accesses);
+  public String setCardAccess(final Card card, final AccessesSnapshot accessesSnapshot) {
+    return accessRepository.setCardAccesses(card, accessesSnapshot);
     //        TODO schedule job generation
   }
 }

@@ -1,8 +1,7 @@
 package com.example.connector.adapters.accessdb;
 
-import com.example.connector.domain.model.Access;
+import com.example.connector.domain.model.AccessesSnapshot;
 import com.example.connector.domain.model.Card;
-import com.example.connector.domain.model.CardAccess;
 import com.example.connector.domain.ports.CardAccessRepository;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -12,12 +11,6 @@ import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Repository
 class DbCardAccessRepository implements CardAccessRepository {
@@ -30,25 +23,33 @@ class DbCardAccessRepository implements CardAccessRepository {
 
   @Override
   @Transactional(isolation = Isolation.SERIALIZABLE)
-  public String setCardAccesses(final Card card, final List<Access> accesses) {
-    CardAccessDatabaseModel operationResult;
+  public String setCardAccesses(final Card card, final AccessesSnapshot accessesSnapshot) {
+    CardAccessHistoryDatabaseModel operationResult;
 
     final var query = getQueryByCardNumber(card.getNumber());
-    final var update = getUpdateSetAccesses(accesses);
+    final var update = getUpdatePushAccessesSnapshots(accessesSnapshot);
     final var options = getOptionsReturnNew();
-    final var updatedCardAccess =
-        mongoTemplate.findAndModify(query, update, options, CardAccessDatabaseModel.class);
+    final var updatedCardAccessHistory =
+        mongoTemplate.findAndModify(query, update, options, CardAccessHistoryDatabaseModel.class);
 
-    if (updatedCardAccess == null) {
-      final var id = UUID.randomUUID().toString();
-      final var cardAccess = CardAccess.of(id, card, accesses);
-      final var cardAccessDatabaseModel = CardAccessDatabaseModel.fromDomain(cardAccess);
-      operationResult = mongoTemplate.save(cardAccessDatabaseModel);
+    if (updatedCardAccessHistory == null) {
+      final var cardAccessHistoryDatabaseModel =
+          CardAccessHistoryDatabaseModel.fromDomain(card, accessesSnapshot);
+      operationResult = mongoTemplate.save(cardAccessHistoryDatabaseModel);
     } else {
-      operationResult = updatedCardAccess;
-    }
+      operationResult = updatedCardAccessHistory;
 
-    createAndPersistHistoryRecord(operationResult);
+      final var queryPreviousAccessesSnapshot =
+          getQueryByCardNumberAndAccessesSnapshots_ActiveToDoesNotExistAndAccessesSnapshots_IdNotEqual(
+              card.getNumber(), accessesSnapshot.getId());
+      final var updatePreviousAccessesSnapshot =
+          getUpdateSetAccessesSnapshots_Entry_ActiveToAndReplacedBy(accessesSnapshot);
+      mongoTemplate.findAndModify(
+          queryPreviousAccessesSnapshot,
+          updatePreviousAccessesSnapshot,
+          options,
+          CardAccessHistoryDatabaseModel.class);
+    }
 
     return operationResult.getId();
   }
@@ -59,11 +60,10 @@ class DbCardAccessRepository implements CardAccessRepository {
     return query;
   }
 
-  private Update getUpdateSetAccesses(final List<Access> accesses) {
-    final var accessDatabaseModels =
-        accesses.stream().map(AccessDatabaseModel::fromDomain).collect(Collectors.toList());
+  private Update getUpdatePushAccessesSnapshots(final AccessesSnapshot accessesSnapshot) {
+    final var accessDatabaseModels = AccessesSnapshotDatabaseModel.fromDomain(accessesSnapshot);
     final var update = new Update();
-    update.set("accesses", accessDatabaseModels);
+    update.push("accessesSnapshots", accessDatabaseModels);
     return update;
   }
 
@@ -73,60 +73,28 @@ class DbCardAccessRepository implements CardAccessRepository {
     return options;
   }
 
-  private void createAndPersistHistoryRecord(CardAccessDatabaseModel cardAccess) {
-    final var id = UUID.randomUUID().toString();
-    final var card = cardAccess.getCard();
-    final var newAccesses = cardAccess.getAccesses();
-    final var now = LocalDateTime.now();
-
-    final var newAccessHistoryDatabaseModel =
-        AccessHistoryDatabaseModel.builder().activeFrom(now).accesses(newAccesses).build();
-    final var historyRecord =
-        CardAccessHistoryDatabaseModel.builder()
-            .id(id)
-            .card(card)
-            .accessesHistory(Collections.singletonList(newAccessHistoryDatabaseModel))
-            .build();
-
-    final var query = getQueryByCardNumber(card.getNumber());
-    final var update = getUpdatePushAccessesHistory(newAccessHistoryDatabaseModel);
-    final var updatedCardAccessHistory =
-        mongoTemplate.findAndModify(query, update, CardAccessHistoryDatabaseModel.class);
-
-    if (updatedCardAccessHistory == null) {
-      mongoTemplate.save(historyRecord);
-    } else {
-      final var queryPreviousAccessHistory =
-          getQueryByCardNumberAndAccessesHistory_ActiveToDoesNotExist(card.getNumber());
-      final var updatePreviousAccessHistory = getUpdateSetAccessesHistory_Entry_ActiveTo(now);
-
-      mongoTemplate.findAndModify(
-          queryPreviousAccessHistory,
-          updatePreviousAccessHistory,
-          CardAccessHistoryDatabaseModel.class);
-    }
-  }
-
-  private Update getUpdatePushAccessesHistory(
-      final AccessHistoryDatabaseModel accessHistoryDatabaseModel) {
-    final var update = new Update();
-    update.push("accessesHistory", accessHistoryDatabaseModel);
-    return update;
-  }
-
-  private Query getQueryByCardNumberAndAccessesHistory_ActiveToDoesNotExist(
-      final String cardNumber) {
+  private Query
+      getQueryByCardNumberAndAccessesSnapshots_ActiveToDoesNotExistAndAccessesSnapshots_IdNotEqual(
+          final String cardNumber, String newAccessSnapshotId) {
     final var cardNumberCriteria = Criteria.where("card.number").is(cardNumber);
-    final var accessHistory_ActiveToDoesNotExistCriteria =
-        Criteria.where("accessesHistory").elemMatch(Criteria.where("activeTo").exists(false));
+    final var accessesSnapshots_ActiveToDoesNotExistCriteria =
+        Criteria.where("accessesSnapshots").elemMatch(Criteria.where("activeTo").exists(false));
+    final var accessesSnapshots_IdNotEqualCriteria =
+        Criteria.where("accessesSnapshots").elemMatch(Criteria.where("id").ne(newAccessSnapshotId));
     final var andBothCriteria =
-        new Criteria().andOperator(cardNumberCriteria, accessHistory_ActiveToDoesNotExistCriteria);
+        new Criteria()
+            .andOperator(
+                cardNumberCriteria,
+                accessesSnapshots_ActiveToDoesNotExistCriteria,
+                accessesSnapshots_IdNotEqualCriteria);
     return new Query(andBothCriteria);
   }
 
-  private Update getUpdateSetAccessesHistory_Entry_ActiveTo(final LocalDateTime activeTo) {
+  private Update getUpdateSetAccessesSnapshots_Entry_ActiveToAndReplacedBy(
+      final AccessesSnapshot newAccessesSnapshot) {
     final var update = new Update();
-    update.set("accessesHistory.$.activeTo", activeTo);
+    update.set("accessesSnapshots.$.activeTo", newAccessesSnapshot.getActiveFrom());
+    update.set("accessesSnapshots.$.replacedBy", newAccessesSnapshot.getId());
     return update;
   }
 }
